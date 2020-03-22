@@ -1,21 +1,21 @@
 #pragma once
-#include "stdint.h"
 #include "dl_lib_coefgetter_if.h"
+#include "stdint.h"
 
 //Opaque model data container
 typedef struct model_iface_data_t model_iface_data_t;
 
 //Set wake words recognition operating mode
-//The probability of being wake words is increased with increasing mode, 
+//The probability of being wake words is increased with increasing mode,
 //As a consequence also the false alarm rate goes up
 typedef enum {
-	DET_MODE_90 = 0,  //Normal, response accuracy rate about 90%
-	DET_MODE_95       //Aggressive, response accuracy rate about 95%
+  DET_MODE_90 = 0,  //Normal, response accuracy rate about 90%
+  DET_MODE_95       //Aggressive, response accuracy rate about 95%
 } det_mode_t;
 
 typedef struct {
-    int wake_word_num;     //The number of all wake words
-    char **wake_word_list; //The name list of wake words  
+  int wake_word_num;      //The number of all wake words
+  char **wake_word_list;  //The name list of wake words
 } wake_word_info_t;
 
 /**
@@ -25,8 +25,7 @@ typedef struct {
  * @param model_coeff The specified wake word model coefficient
  * @returns Handle to the model data
  */
-typedef model_iface_data_t* (*esp_wn_iface_op_create_t)(const model_coeff_getter_t *model_coeff, det_mode_t det_mode);
-
+typedef model_iface_data_t *(*esp_wn_iface_op_create_t)(const model_coeff_getter_t *model_coeff, det_mode_t det_mode);
 
 /**
  * @brief Callback function type to fetch the amount of samples that need to be passed to the detect function
@@ -38,7 +37,6 @@ typedef model_iface_data_t* (*esp_wn_iface_op_create_t)(const model_coeff_getter
  * @return The amount of samples to feed the detect function
  */
 typedef int (*esp_wn_iface_op_get_samp_chunksize_t)(model_iface_data_t *model);
-
 
 /**
  * @brief Get the sample rate of the samples to feed to the detect function
@@ -65,7 +63,7 @@ typedef int (*esp_wn_iface_op_get_word_num_t)(model_iface_data_t *model);
  * @param word_index The index of wake word
  * @returns the detection threshold
  */
-typedef char* (*esp_wn_iface_op_get_word_name_t)(model_iface_data_t *model, int word_index);
+typedef char *(*esp_wn_iface_op_get_word_name_t)(model_iface_data_t *model, int word_index);
 
 /**
  * @brief Set the detection threshold to manually abjust the probability 
@@ -105,18 +103,17 @@ typedef int (*esp_wn_iface_op_detect_t)(model_iface_data_t *model, int16_t *samp
  */
 typedef void (*esp_wn_iface_op_destroy_t)(model_iface_data_t *model);
 
-
 /**
  * This structure contains the functions used to do operations on a wake word detection model.
  */
 typedef struct {
-    esp_wn_iface_op_create_t create;
-    esp_wn_iface_op_get_samp_chunksize_t get_samp_chunksize;
-    esp_wn_iface_op_get_samp_rate_t get_samp_rate;
-    esp_wn_iface_op_get_word_num_t get_word_num;
-    esp_wn_iface_op_get_word_name_t get_word_name;
-    esp_wn_iface_op_set_det_threshold_t set_det_threshold;
-    esp_wn_iface_op_get_det_threshold_t get_det_threshold;
-    esp_wn_iface_op_detect_t detect;
-    esp_wn_iface_op_destroy_t destroy;
+  esp_wn_iface_op_create_t create;
+  esp_wn_iface_op_get_samp_chunksize_t get_samp_chunksize;
+  esp_wn_iface_op_get_samp_rate_t get_samp_rate;
+  esp_wn_iface_op_get_word_num_t get_word_num;
+  esp_wn_iface_op_get_word_name_t get_word_name;
+  esp_wn_iface_op_set_det_threshold_t set_det_threshold;
+  esp_wn_iface_op_get_det_threshold_t get_det_threshold;
+  esp_wn_iface_op_detect_t detect;
+  esp_wn_iface_op_destroy_t destroy;
 } esp_wn_iface_t;

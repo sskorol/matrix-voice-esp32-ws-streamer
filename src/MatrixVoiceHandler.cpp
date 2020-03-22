@@ -1,16 +1,21 @@
 #include "MatrixVoiceHandler.hpp"
 
-// WakeNet
+// WakeNet constants
 const esp_wn_iface_t *MatrixVoiceHandler::WAKE_NET = &WAKENET_MODEL;
 const model_coeff_getter_t *MatrixVoiceHandler::MODEL_COEFF_GETTER = &WAKENET_COEFF;
 
-// Mics
+// Mics constants
 const unsigned long MatrixVoiceHandler::AUDIO_STREAM_BLOCK_TIME = 5000;
 const unsigned long MatrixVoiceHandler::HOTWORD_RESET_TIMEOUT = 8000;
 const int MatrixVoiceHandler::VOICE_BUFFER_SIZE = 1024;
 
-// Everloop
+// Everloop constants
 const unsigned long MatrixVoiceHandler::EVERLOOP_BLOCK_TIME = 10000;
+
+/**
+ * Gamma correction is used to be able to change brightness, while keeping the colors appear the same.
+ * Check: https://learn.adafruit.com/led-tricks-gamma-correction/the-issue
+ */
 const uint8_t PROGMEM MatrixVoiceHandler::GAMMA8[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
@@ -32,19 +37,17 @@ const uint8_t PROGMEM MatrixVoiceHandler::GAMMA8[] = {
     255};
 
 MatrixVoiceHandler::MatrixVoiceHandler() {
+  // WakeNet model loading (Alexa keyword detection)
   model_data = WAKE_NET->create(MODEL_COEFF_GETTER, DET_MODE_90);
   _shouldSendAudio = false;
   _isHotwordDetected = false;
-  brightness = 15;
-}
-
-MatrixVoiceHandler *MatrixVoiceHandler::init() {
   initHotwordResetTimer();
   initMatrixCore();
-  return this;
 }
 
-// Hotword API
+/**
+ * Required for resetting hotword and everloop state if we don't receive a transcribe from Kaldi.
+ */
 void MatrixVoiceHandler::resetHotword() {
   if (isHotwordDetected()) {
     changeHotwordState(false);
@@ -53,31 +56,39 @@ void MatrixVoiceHandler::resetHotword() {
   }
 }
 
-// Workaround for passing static callback into xTimerCreate API
-static void hotwordCallbackWrapper(TimerHandle_t _handle) {
-  MatrixVoiceHandler *instance = static_cast<MatrixVoiceHandler *>(pvTimerGetTimerID(_handle));
-  instance->resetHotword();
-}
-
+/**
+ * Create RTOS timer for resetting a hotword state if we don't receive a transcribe from Kaldi.
+ */
 void MatrixVoiceHandler::initHotwordResetTimer() {
   hotwordTimer = xTimerCreate("hotwordTimer", pdMS_TO_TICKS(HOTWORD_RESET_TIMEOUT), pdFALSE, this,
                               hotwordCallbackWrapper);
   Serial.println("[ESP] Created hotword timer");
 }
 
+/**
+ * Start a timer for hotword resetting.
+ */
 void MatrixVoiceHandler::startHotwordTimer() {
   xTimerStart(hotwordTimer, 0);
 }
 
+/**
+ * Check if hotword was recognized by WakeNet.
+ */
 bool MatrixVoiceHandler::isHotwordDetected() {
   return _isHotwordDetected;
 }
 
+/**
+ * Update hotword state from outside to either start hotword detection or stream audio to Kaldi.
+ */
 void MatrixVoiceHandler::changeHotwordState(bool isHotwordDetected) {
   _isHotwordDetected = isHotwordDetected;
 }
 
-// Matrix API
+/**
+ * Common Matrix Voice API setup.
+ */
 void MatrixVoiceHandler::initMatrixCore() {
   bus.Init();
   everloop.Setup(&bus);
@@ -89,7 +100,41 @@ void MatrixVoiceHandler::initMatrixCore() {
   Serial.println("[ESP] Configured Matrix Core");
 }
 
-// Everloop
+/**
+ * Create and aquire Everloop task for managing LEDs state.
+ */
+MatrixVoiceHandler *MatrixVoiceHandler::initEverloopTask(TaskCallbackFunc _everloopCallbackFn) {
+  everloopCallbackFn = _everloopCallbackFn;
+  everloopGroup = xEventGroupCreate();
+  xTaskCreatePinnedToCore(everloopTaskWrapper, "everloopTask", EVERLOOP_TASK_STACK_SIZE, this, 5, &everloopTaskHandler, 1);
+  aquireEverloop();
+  return this;
+}
+
+/**
+ * When we set Everloop bits, facade's callback is called if there are no blocking tasks present.
+ */
+void MatrixVoiceHandler::aquireEverloop() {
+  xEventGroupSetBits(everloopGroup, EVERLOOP_BIT);
+}
+
+/**
+ * When we release Everloop bits, other tasks may be locked for further processing.
+ */
+void MatrixVoiceHandler::releaseEverloop() {
+  xEventGroupClearBits(everloopGroup, EVERLOOP_BIT);
+}
+
+/**
+ * Wait until Everloop bits become available for corresponing callback processing.
+ */
+void MatrixVoiceHandler::waitForEverloop() {
+  xEventGroupWaitBits(everloopGroup, EVERLOOP_BIT, false, false, portMAX_DELAY);
+}
+
+/**
+ * Adjust preceded colors with brightness and gamma correction.
+ */
 unsigned int *MatrixVoiceHandler::adjustColors(unsigned int *colors) {
   unsigned int *rgbwColors = new unsigned int[COLORS_AMOUNT];
   for (unsigned int i = 0; i < COLORS_AMOUNT; i++) {
@@ -99,12 +144,18 @@ unsigned int *MatrixVoiceHandler::adjustColors(unsigned int *colors) {
   return rgbwColors;
 }
 
+/**
+ * This API is iteratively called when OTA update is in progress.
+ * When we receive a current progress from OTA callback, we can project it to LEDs.
+ */
 void MatrixVoiceHandler::renderOTAUpdateProgress(unsigned int estimatedUpdateProgress) {
   const unsigned int *rgbwColors = adjustColors(updateInProgressColors);
   const unsigned int *rgbwNoColors = adjustColors(noColors);
   const unsigned int ledsSize = image1d.leds.size();
+  // Transform current progress from [0:100] to [0:LEDS_AMOUNT] range
   const float progress = round((estimatedUpdateProgress / 100.0f) * (float) ledsSize);
 
+  // Go though all the LEDs to reflect current progress
   for (int i = 0; i < ledsSize; i++) {
     matrix_hal::LedValue &currentLed = image1d.leds[i];
     if (i <= progress) {
@@ -119,11 +170,15 @@ void MatrixVoiceHandler::renderOTAUpdateProgress(unsigned int estimatedUpdatePro
   delete rgbwNoColors;
 }
 
+/**
+ * Main rendering Everloop API. Reflects connection, hotword and idle states.
+ */
 void MatrixVoiceHandler::renderEverloop(bool isWiFiConnected) {
   unsigned int *rgbwColors;
   const unsigned int *rgbwNoColors = adjustColors(noColors);
   const unsigned int ledsSize = image1d.leds.size();
 
+  // Adjust colors with brightness and gamma correction depending on state
   if (isHotwordDetected()) {
     rgbwColors = adjustColors(hotwordColors);
   } else if (!isWiFiConnected) {
@@ -132,7 +187,7 @@ void MatrixVoiceHandler::renderEverloop(bool isWiFiConnected) {
     rgbwColors = adjustColors(idleColors);
   }
 
-  // Animate LED ring
+  // Animate LED ring: outer loop controls the number of LEDs we need to turn on / off 
   unsigned int ledNumber = 0;
   do {
     for (int i = 0; i < ledsSize; i++) {
@@ -144,23 +199,29 @@ void MatrixVoiceHandler::renderEverloop(bool isWiFiConnected) {
       }
       everloop.Write(&image1d);
     }
-    delay(40);
+    delay(EVERLOOP_OTA_UPDATE_ANIMATION_DELAY);
   } while (ledNumber++ < ledsSize);
 
   delete rgbwColors;
   delete rgbwNoColors;
 }
 
-// Mics
-void MatrixVoiceHandler::readAudioData(void (*voiceCallbackFn)(uint8_t *voicebuffer, unsigned int bufferSize)) {
+/**
+ * Main audio straming API for hotword detection and speech recognition.
+ */
+void MatrixVoiceHandler::readAudioData(AudioCallbackFunc audioCallback) {
+  // Read Matrix Voice mics data
   microphoneArray.Read();
 
+  // Prepare a beamformed voice buffer
   int16_t voicebuffer[VOICE_BUFFER_SIZE];
   for (uint16_t i = 0; i < VOICE_BUFFER_SIZE; i++) {
     voicebuffer[i] = microphoneArray.Beam(i);
   }
 
+  // Listening for a hotword
   if (!isHotwordDetected()) {
+    // If detected, animate LEDs and release a flag for further audio streaming to Kaldi
     int resultCode = WAKE_NET->detect(model_data, voicebuffer);
     if (resultCode > 0) {
       Serial.println("[ESP] Detected hotword");
@@ -170,15 +231,55 @@ void MatrixVoiceHandler::readAudioData(void (*voiceCallbackFn)(uint8_t *voicebuf
     }
   }
 
+  // When we detected a hotword, we can now call MQTT callback to stream audio to Kaldi server
   if (isHotwordDetected()) {
-    voiceCallbackFn((uint8_t *)voicebuffer, VOICE_BUFFER_SIZE);
+    audioCallback((uint8_t *)voicebuffer, VOICE_BUFFER_SIZE);
   }
 }
 
+/**
+ * Update audio flag from outside to block / unblock streaming.
+ */
 void MatrixVoiceHandler::changeAudioState(bool shouldSendAudio) {
   _shouldSendAudio = shouldSendAudio;
 }
 
+/**
+ * Check if we should start streaming audio. This flag is activated when MQTT connection is established.
+ */
 bool MatrixVoiceHandler::shouldSendAudio() {
   return _shouldSendAudio;
+}
+
+/**
+ * Setup a primary task for hotword detection and streaming audio via MQTT to Kaldi server.
+ * Callback is provided via MatrixVoiceFacade.
+ */
+MatrixVoiceHandler *MatrixVoiceHandler::initAudioStreamingTask(TaskCallbackFunc _audioStreamCallbackFn) {
+  audioStreamCallbackFn = _audioStreamCallbackFn;
+  audioStreamingGroup = xEventGroupCreate();
+  xTaskCreatePinnedToCore(audioStreamingTaskWrapper, "microphonesTask", AUDIO_STREAMING_TASK_STACK_SIZE, this, 3, &audioStreamingTaskHandler, 0);
+  aquireAudioStream();
+  return this;
+}
+
+/**
+ * When we aquire Mics bits, we can start sending audio stream for further recognition.
+ */
+void MatrixVoiceHandler::aquireAudioStream() {
+  xEventGroupSetBits(audioStreamingGroup, AUDIO_STREAMING_BIT);
+}
+
+/**
+ * When we release Mics bits, other tasks may be locked for further processing.
+ */
+void MatrixVoiceHandler::releaseAudioStream() {
+  xEventGroupClearBits(audioStreamingGroup, AUDIO_STREAMING_BIT);
+}
+
+/**
+ * Wait until Mics bits are aquired for further audio stream processing.
+ */
+void MatrixVoiceHandler::waitForAudioStream() {
+  xEventGroupWaitBits(audioStreamingGroup, AUDIO_STREAMING_BIT, false, false, portMAX_DELAY);
 }

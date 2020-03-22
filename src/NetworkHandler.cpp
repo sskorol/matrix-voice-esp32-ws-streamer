@@ -1,20 +1,28 @@
 #include "NetworkHandler.hpp"
 
+// Wi-Fi settings
 const long NetworkHandler::WIFI_CONNECTION_DELAY = 5000;
 const long NetworkHandler::WIFI_RECONNECT_ATTEMPTS = 10;
 
+// Topic required for streaming audio chunks to Kaldi server
 const std::string NetworkHandler::AUDIO_FRAME_TOPIC = PID + std::string("/audioServer/audioFrame");
+// These 2 topics may change hotword flag to trigger either wakeword detection or streaming to Kaldi
 const std::string NetworkHandler::TOGLE_OFF_TOPIC = PID + std::string("/hotword/toggleOff");
 const std::string NetworkHandler::TOGGLE_ON_TOPIC = PID + std::string("/hotword/toggleOn");
+// Use this topic if you want to print some debug info (not used right now in favor of Serial log)
 const std::string NetworkHandler::DEBUG_TOPIC = PID + std::string("/debug");
+// A special topic for restarting ESP32
 const std::string NetworkHandler::RESTART_TOPIC = PID + std::string("/restart");
+// This topic is used for receiving voice transcription from Kaldi server
 const std::string NetworkHandler::TRANSCRIBE_TOPIC = PID + std::string("/finalTranscribe");
 
+// MQTT settings
 const String NetworkHandler::ASYNC_CLIENT_ID = "MatrixVoiceAsync";
 const String NetworkHandler::SYNC_CLIENT_ID = "MatrixVoiceSync";
 const unsigned int NetworkHandler::JSON_BUFFER_SIZE = 300;
 const unsigned long NetworkHandler::NETWORK_RECONNECT_TIMEOUT = 2000;
 
+// A payload key used for restarting ESP32 via async MQTT
 const std::string NetworkHandler::OTA_PASSWORD_HASH_KEY = "passwordHash";
 
 NetworkHandler::NetworkHandler(MatrixVoiceHandler *_matrixVoiceHandler) {
@@ -22,13 +30,19 @@ NetworkHandler::NetworkHandler(MatrixVoiceHandler *_matrixVoiceHandler) {
   matrixVoiceHandler = _matrixVoiceHandler;
 }
 
-NetworkHandler *NetworkHandler::init() {
+/**
+ * Start Wi-Fi, MQTT and OTA.
+ */
+NetworkHandler *NetworkHandler::setup() {
   initMqttClients();
   initWiFi();
   initOTA();
   return this;
 }
 
+/**
+ * When we establish connection via async MQTT, we need to subscribe to common topics.
+ */
 void NetworkHandler::mqttConnectHandler(bool isSessionPresent) {
   Serial.println("[ESP] Connected to async MQTT");
   asyncMqttClient.subscribe(TOGLE_OFF_TOPIC.c_str(), 0);
@@ -37,6 +51,9 @@ void NetworkHandler::mqttConnectHandler(bool isSessionPresent) {
   asyncMqttClient.subscribe(TRANSCRIBE_TOPIC.c_str(), 0);
 }
 
+/**
+ * When we are disconnected from async MQTT, we start reconnect timer.
+ */
 void NetworkHandler::mqttDisconnectHandler(AsyncMqttClientDisconnectReason reason) {
   Serial.println("[ESP] Disconnected from async MQTT");
   if (isWiFiConnected) {
@@ -44,6 +61,10 @@ void NetworkHandler::mqttDisconnectHandler(AsyncMqttClientDisconnectReason reaso
   }
 }
 
+/**
+ * Connect to MQTT broker via async client. This client is used only for a common messaging stuff.
+ * See sync client for getting info about audio streaming.
+ */
 void NetworkHandler::connectToAsyncMqtt() {
   if (isWiFiConnected && !asyncMqttClient.connected()) {
     Serial.println("[ESP] Connecting to async MQTT...");
@@ -53,12 +74,17 @@ void NetworkHandler::connectToAsyncMqtt() {
   }
 }
 
+/**
+ * Connect to MQTT broker via sync client. This client is used for sending audio stream to Kaldi server.
+ * We can't reuse the a single client both for streaming and common messaging.
+ */
 void NetworkHandler::connectToSyncMqtt() {
   if (isWiFiConnected && !syncMqttClient.connected()) {
     Serial.println("[ESP] Connecting to sync MQTT...");
     const String clientId = SYNC_CLIENT_ID + "-" + String(random(0xffff), HEX);
     if (syncMqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
       Serial.println("[ESP] Connected to sync MQTT");
+      // Let Matrix Voice handler know if we can start streaming
       matrixVoiceHandler->changeAudioState(true);
     } else {
       Serial.println("[ESP] Cannot connect to sync MQTT");
@@ -68,22 +94,31 @@ void NetworkHandler::connectToSyncMqtt() {
   }
 }
 
+/**
+ * A helper method for topics' / payloads' comparison.
+ */
 bool NetworkHandler::hasValue(const std::string inputString, const std::string searchString) {
   return inputString.find(searchString) != std::string::npos;
 }
 
+/**
+ * Main async MQTT client callback for common messages' processing.
+ */
 void NetworkHandler::mqttMessageHandler(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t length, size_t index, size_t total) {
   if (length + index == total) {
     const std::string convertedTopic(topic);
     const std::string convertedPayload(payload);
 
+    // If we receive a trascription from Kaldi server, we have to go back to wakeword detection state
     if ((hasValue(convertedTopic, "finalTranscribe") && matrixVoiceHandler->isHotwordDetected()) || hasValue(convertedTopic, "toggleOn")) {
       matrixVoiceHandler->changeHotwordState(false);
       Serial.println("[ESP] Received final transcribe");
-      aquireEverloop();
+      matrixVoiceHandler->aquireEverloop();
+    // In case of any unexpected behaviour with audio streaming, we can still change hotword flag manually
     } else if (hasValue(convertedTopic, "toggleOff")) {
       matrixVoiceHandler->changeHotwordState(true);
-      aquireEverloop();
+      matrixVoiceHandler->aquireEverloop();
+    // If we want to restart ESP32 for some reason, we have to provide a hashed password in a payload
     } else if (hasValue(convertedTopic, RESTART_TOPIC.c_str())) {
       StaticJsonDocument<JSON_BUFFER_SIZE> jsonBuffer;
       DeserializationError error = deserializeJson(jsonBuffer, convertedPayload.c_str());
@@ -99,6 +134,9 @@ void NetworkHandler::mqttMessageHandler(char *topic, char *payload, AsyncMqttCli
   }
 }
 
+/**
+ * Setup sync and async MQTT clients.
+ */
 void NetworkHandler::initMqttClients() {
   initMqttReconnectTimer();
 
@@ -118,88 +156,74 @@ void NetworkHandler::initMqttClients() {
   syncMqttClient.setServer(MQTT_IP, MQTT_PORT);
 }
 
-// Workaround for passing static callback into xTimerCreate API
-static void mqttCallbackWrapper(TimerHandle_t _handle) {
-  NetworkHandler *instance = static_cast<NetworkHandler *>(pvTimerGetTimerID(_handle));
-  instance->connectToAsyncMqtt();
-}
-
+/**
+ * In case if we lose async MQTT connection, this timer will help to reconnect automatically.
+ */
 void NetworkHandler::initMqttReconnectTimer() {
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(NETWORK_RECONNECT_TIMEOUT), pdFALSE, this,
                                     mqttCallbackWrapper);
   Serial.println("[ESP] Created mqtt reconnect timer");
 }
 
+/**
+ * MQTT reconnect timer is started within disconnect callback.
+ */
 void NetworkHandler::startMqttReconnectTimer() {
   xTimerStart(mqttReconnectTimer, 0);
 }
 
-void NetworkHandler::stopMqttReconnectTimer() {
-  xTimerStop(mqttReconnectTimer, 0);
-}
-
+/**
+ * Common sync MQTT polling, which is called within Arduino loop.
+ */
 void NetworkHandler::keepSyncMqttClientAlive() {
   syncMqttClient.loop();
 }
 
+/**
+ * External check if sync MQTT is still connected.
+ */
 bool NetworkHandler::isSyncMqttClientConnected() {
   return syncMqttClient.connected();
 }
 
+/**
+ * Main sync MQTT publisher, which is used for sending audio chunks to Kaldi server.
+ */
 void NetworkHandler::publishSync(const char *topic, const uint8_t *payload, unsigned int length) {
   syncMqttClient.publish(topic, payload, length);
 }
 
-// WiFI API
-// Workaround for passing static callback into xTimerCreate API
-static void wifiCallbackWrapper(TimerHandle_t _handle) {
-  NetworkHandler *instance = static_cast<NetworkHandler *>(pvTimerGetTimerID(_handle));
-  instance->connectToWiFi();
-}
-
-void NetworkHandler::initWiFiReconnectTimer() {
-  wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(NETWORK_RECONNECT_TIMEOUT), pdFALSE, this,
-                                    wifiCallbackWrapper);
-  Serial.println("[ESP] Created Wi-Fi reconnect timer");
-}
-
-void NetworkHandler::startWiFIReconnectTimer() {
-  xTimerStart(wifiReconnectTimer, 0);
-}
-
-void NetworkHandler::stopWiFiReconnectTimer() {
-  xTimerStop(wifiReconnectTimer, 0);
-}
-
+/**
+ * Wi-FI connect / reconnect events handler.
+ */
 void NetworkHandler::wifiEventHandler(WiFiEvent_t event) {
   switch (event) {
+    // When we connect to Wi-Fi, we can proceed with MQTT and change LEDs state
     case SYSTEM_EVENT_STA_GOT_IP:
       Serial.print("[ESP] Received IP address: ");
       Serial.println(WiFi.localIP());
       isWiFiConnected = true;
+      isUpdateInProgess = false;
       connectToSyncMqtt();
       connectToAsyncMqtt();
-      aquireEverloop();
+      matrixVoiceHandler->aquireEverloop();
       break;
+    // If we are disconnected, we need to block audio streaming and update LEDs
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("[ESP] Disconnected from Wi-Fi router");
-      stopMqttReconnectTimer();
-      startWiFIReconnectTimer();
       isWiFiConnected = false;
       matrixVoiceHandler->changeAudioState(false);
       matrixVoiceHandler->changeHotwordState(false);
-      aquireEverloop();
+      matrixVoiceHandler->aquireEverloop();
       break;
     default:
       break;
   }
 }
 
-void NetworkHandler::connectToWiFi() {
-  Serial.println("Connecting to Wi-Fi...");
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-}
-
+/**
+ * Setup Wi-FI connection.
+ */
 void NetworkHandler::initWiFi() {
   if (!isWiFiConnected) {
     Serial.println("[ESP] WI-FI is not connected, setting up...");
@@ -222,38 +246,48 @@ void NetworkHandler::initWiFi() {
   }
 }
 
+/**
+ * External check if Wi-Fi client is still connected.
+ */
 bool NetworkHandler::isWiFiClientConnected() {
   return isWiFiConnected;
 }
 
-// OTA API
+/**
+ * Common OTA configuration to be able to update code without wires.
+ */
 void NetworkHandler::initOTA() {
   ArduinoOTA.setHostname(HOSTNAME);
   ArduinoOTA.setPort(OTA_PORT);
   ArduinoOTA.setPasswordHash(OTA_PASS_HASH);
   ArduinoOTA
+      // Reset all the states while updating
       .onStart([this]() {
         this->isUpdateInProgess = true;
         this->isWiFiConnected = false;
         this->matrixVoiceHandler->changeAudioState(false);
         this->matrixVoiceHandler->changeHotwordState(false);
-        releaseAudioStream();
-        releaseEverloop();
+        this->matrixVoiceHandler->releaseAudioStream();
+        this->matrixVoiceHandler->releaseEverloop();
       })
+      // Send progress to everloop API
       .onProgress([this](unsigned int progress, unsigned int total) {
         unsigned int estimatedProgress = progress / (total / 100);
         this->matrixVoiceHandler->renderOTAUpdateProgress(estimatedProgress);
-      })
-      .onEnd([this]() {
-        this->isUpdateInProgess = false;
       });
   ArduinoOTA.begin();
 }
 
+/**
+ * OTA updates checking in a main Arduino loop.
+ */
 void NetworkHandler::trackOTAUpdates() {
   ArduinoOTA.handle();
 }
 
+/**
+ * Make sure we are not polling while OTA updates.
+ */
 bool NetworkHandler::isOTAUpdateInProgress() {
   return isUpdateInProgess;
 }
