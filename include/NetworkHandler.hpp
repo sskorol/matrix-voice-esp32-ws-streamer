@@ -56,6 +56,8 @@ class NetworkHandler {
     static const std::string VOICE_STREAM_TOPIC;
     static const std::string HOTWORD_TOPIC;
     static const std::string MUTE_TOPIC;
+    static const std::string AUDIO_GAIN_TOPIC;
+    static const std::string AUDIO_RATE_TOPIC;
     static const std::string DEBUG_TOPIC;
     static const std::string RESTART_TOPIC;
     static const std::string TRANSCRIBE_TOPIC;

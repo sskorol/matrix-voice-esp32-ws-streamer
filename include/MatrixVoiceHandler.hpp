@@ -114,6 +114,8 @@ class MatrixVoiceHandler {
   void readAudioData(AudioCallbackFunc audioCallback);
   bool shouldSendAudio();
   void changeAudioState(bool shouldSendAudio);
+  void changeAudioGain(uint16_t gain);
+  void changeAudioRate(uint32_t rate);
 
   // LEDs' task handlers
   void initEverloopTask(TaskCallbackFunc everloopCallbackFn);

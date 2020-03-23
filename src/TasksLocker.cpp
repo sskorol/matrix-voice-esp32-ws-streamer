@@ -1,4 +1,4 @@
-#include "TasksHandler.hpp"
+#include "TasksLocker.hpp"
 
 /**
  * Semaphore is required for blocking different tasks like everoop or mics to avoid ESP32 crashing.

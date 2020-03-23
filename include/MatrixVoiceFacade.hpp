@@ -3,7 +3,7 @@
 
 #include "MatrixVoiceHandler.hpp"
 #include "NetworkHandler.hpp"
-#include "TasksHandler.hpp"
+#include "TasksLocker.hpp"
 
 /**
  * Aggregates key handlers to provide high level API to be used in EntryPoint.

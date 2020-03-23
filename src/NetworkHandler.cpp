@@ -10,6 +10,10 @@ const std::string NetworkHandler::VOICE_STREAM_TOPIC = PID + std::string("/strea
 const std::string NetworkHandler::HOTWORD_TOPIC = PID + std::string("/hotword");
 // Use this topic to block or unblock audio streaming
 const std::string NetworkHandler::MUTE_TOPIC = PID + std::string("/mute");
+// Change Mics Gain
+const std::string NetworkHandler::AUDIO_GAIN_TOPIC = PID + std::string("/audio/gain");
+// Change Mics Rate
+const std::string NetworkHandler::AUDIO_RATE_TOPIC = PID + std::string("/audio/rate");
 // Use this topic if you want to print some debug info (not used right now in favor of Serial log)
 const std::string NetworkHandler::DEBUG_TOPIC = PID + std::string("/debug");
 // A special topic for restarting ESP32
@@ -138,6 +142,20 @@ void NetworkHandler::mqttMessageHandler(char *topic, char *payload, AsyncMqttCli
       JsonObject jsonRoot = jsonBuffer.as<JsonObject>();
       if (jsonRoot.containsKey(OTA_PASSWORD_HASH_KEY) && jsonRoot[OTA_PASSWORD_HASH_KEY] == OTA_PASS_HASH) {
         ESP.restart();
+      }
+    } else if (hasValue(convertedTopic, AUDIO_GAIN_TOPIC.c_str()) && error.code() == DeserializationError::Ok) {
+      JsonObject jsonRoot = jsonBuffer.as<JsonObject>();
+      if (jsonRoot.containsKey(COMMON_PAYLOAD_KEY)) {
+        uint16_t gain = jsonRoot[COMMON_PAYLOAD_KEY];
+        matrixVoiceHandler->changeAudioGain(gain);
+        Serial.println("[ESP] Updated gain");
+      }
+    } else if (hasValue(convertedTopic, AUDIO_RATE_TOPIC.c_str()) && error.code() == DeserializationError::Ok) {
+      JsonObject jsonRoot = jsonBuffer.as<JsonObject>();
+      if (jsonRoot.containsKey(COMMON_PAYLOAD_KEY)) {
+        uint32_t rate = jsonRoot[COMMON_PAYLOAD_KEY];
+        matrixVoiceHandler->changeAudioRate(rate);
+        Serial.println("[ESP] Updated sampling rate");
       }
     }
   }

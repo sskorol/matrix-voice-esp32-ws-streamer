@@ -243,6 +243,20 @@ void MatrixVoiceHandler::changeAudioState(bool shouldSendAudio) {
 }
 
 /**
+ * Change Mics gain.
+ */
+void MatrixVoiceHandler::changeAudioGain(uint16_t gain) {
+  microphoneArray.SetGain(gain);
+}
+
+/**
+ * Change Mics sampling rate.
+ */
+void MatrixVoiceHandler::changeAudioRate(uint32_t rate) {
+  microphoneArray.SetSamplingRate(rate);
+}
+
+/**
  * Check if we should start streaming audio. This flag is activated when MQTT connection is established.
  */
 bool MatrixVoiceHandler::shouldSendAudio() {

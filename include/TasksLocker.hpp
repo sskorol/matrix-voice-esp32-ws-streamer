@@ -1,5 +1,5 @@
-#ifndef TASKS_HANDLER_HPP
-#define TASKS_HANDLER_HPP
+#ifndef TASKS_LOCKER_HPP
+#define TASKS_LOCKER_HPP
 
 extern "C" {
   #include "freertos/FreeRTOS.h"
