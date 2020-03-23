@@ -42,7 +42,7 @@ class MatrixVoiceHandler {
   matrix_hal::WishboneBus bus;
   matrix_hal::MicrophoneArray microphoneArray;
   matrix_hal::Everloop everloop;
-  matrix_hal::EverloopImage image1d;
+  matrix_hal::EverloopImage everloopImage;
 
   // WakeNet
   static const esp_wn_iface_t *WAKE_NET;
@@ -78,7 +78,7 @@ class MatrixVoiceHandler {
   unsigned int hotwordColors[COLORS_AMOUNT] = {0, 255, 0, 0};
   unsigned int idleColors[COLORS_AMOUNT] = {0, 0, 255, 0};
   unsigned int noWiFiColors[COLORS_AMOUNT] = {255, 0, 0, 0};
-  unsigned int updateInProgressColors[COLORS_AMOUNT] = {250, 255, 61, 0};
+  unsigned int updateInProgressColors[COLORS_AMOUNT] = {153, 51, 255, 0};
   unsigned int noColors[COLORS_AMOUNT] = {0, 0, 0, 0};
 
   // Hotword timer API
@@ -88,6 +88,7 @@ class MatrixVoiceHandler {
   // Setup and utility methods
   void initMatrixCore();
   unsigned int *adjustColors(unsigned int *colors);
+  void changeEverloopColors(const unsigned int *colors, unsigned int renderingLimit);
 
  public:
   // These constants are used for tasks locking in MatrixVoiceFacade
@@ -115,14 +116,14 @@ class MatrixVoiceHandler {
   void changeAudioState(bool shouldSendAudio);
 
   // LEDs' task handlers
-  MatrixVoiceHandler *initEverloopTask(TaskCallbackFunc everloopCallbackFn);
+  void initEverloopTask(TaskCallbackFunc everloopCallbackFn);
   void aquireEverloop();
   void releaseEverloop();
   void waitForEverloop();
   void everloopTaskCallback();
 
   // Mics' task handlers
-  MatrixVoiceHandler *initAudioStreamingTask(TaskCallbackFunc audioStreamCallbackFn);
+  void initAudioStreamingTask(TaskCallbackFunc audioStreamCallbackFn);
   void aquireAudioStream();
   void releaseAudioStream();
   void waitForAudioStream();
@@ -142,7 +143,7 @@ class MatrixVoiceHandler {
     instance->audioStreamCallbackFn();
   }
 
-  // Static wrapper for RTOS timer API wrapping in OO manner.
+  // Static callback for RTOS timer API wrapping in OO manner.
   static void hotwordCallbackWrapper(TimerHandle_t _handle) {
     MatrixVoiceHandler *instance = static_cast<MatrixVoiceHandler *>(pvTimerGetTimerID(_handle));
     instance->resetHotword();

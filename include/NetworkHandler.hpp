@@ -26,6 +26,7 @@ class NetworkHandler {
     static const unsigned int JSON_BUFFER_SIZE;
     static const String ASYNC_CLIENT_ID;
     static const String SYNC_CLIENT_ID;
+    static const std::string COMMON_PAYLOAD_KEY;
 
     AsyncMqttClient asyncMqttClient;
     PubSubClient syncMqttClient;
@@ -52,15 +53,15 @@ class NetworkHandler {
 
   public:
     // Common MQTT topics
-    static const std::string AUDIO_FRAME_TOPIC;
-    static const std::string TOGLE_OFF_TOPIC;
-    static const std::string TOGGLE_ON_TOPIC;
+    static const std::string VOICE_STREAM_TOPIC;
+    static const std::string HOTWORD_TOPIC;
+    static const std::string MUTE_TOPIC;
     static const std::string DEBUG_TOPIC;
     static const std::string RESTART_TOPIC;
     static const std::string TRANSCRIBE_TOPIC;
 
     NetworkHandler(MatrixVoiceHandler *_matrixVoiceHandler);
-    NetworkHandler *setup();
+    void setup();
     
     // WiFi API
     bool isWiFiClientConnected();

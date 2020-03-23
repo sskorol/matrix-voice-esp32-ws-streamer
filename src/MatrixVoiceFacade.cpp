@@ -27,7 +27,7 @@ void MatrixVoiceFacade::audioStreamingTaskCallback() {
     if (matrixVoiceHandler->shouldSendAudio() && networkHandler->isSyncMqttClientConnected() && isTaskAquired(MatrixVoiceHandler::AUDIO_STREAM_BLOCK_TIME)) {
       // Call audio processing API with MQTT streaming callback
       matrixVoiceHandler->readAudioData([this](uint8_t *voicebuffer, unsigned int bufferSize) {
-        this->networkHandler->publishSync(NetworkHandler::AUDIO_FRAME_TOPIC.c_str(), voicebuffer, bufferSize);
+        this->networkHandler->publishSync(NetworkHandler::VOICE_STREAM_TOPIC.c_str(), voicebuffer, bufferSize);
       });
       releaseTask();
     }

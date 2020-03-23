@@ -103,12 +103,11 @@ void MatrixVoiceHandler::initMatrixCore() {
 /**
  * Create and aquire Everloop task for managing LEDs state.
  */
-MatrixVoiceHandler *MatrixVoiceHandler::initEverloopTask(TaskCallbackFunc _everloopCallbackFn) {
+void MatrixVoiceHandler::initEverloopTask(TaskCallbackFunc _everloopCallbackFn) {
   everloopCallbackFn = _everloopCallbackFn;
   everloopGroup = xEventGroupCreate();
   xTaskCreatePinnedToCore(everloopTaskWrapper, "everloopTask", EVERLOOP_TASK_STACK_SIZE, this, 5, &everloopTaskHandler, 1);
   aquireEverloop();
-  return this;
 }
 
 /**
@@ -145,29 +144,38 @@ unsigned int *MatrixVoiceHandler::adjustColors(unsigned int *colors) {
 }
 
 /**
- * This API is iteratively called when OTA update is in progress.
- * When we receive a current progress from OTA callback, we can project it to LEDs.
+ * Base rendering method for Everloop LED ring.
+ * Current algorythm assumes turning on only those LEDs that have id < renderingLimit parameter.
  */
-void MatrixVoiceHandler::renderOTAUpdateProgress(unsigned int estimatedUpdateProgress) {
-  const unsigned int *rgbwColors = adjustColors(updateInProgressColors);
+void MatrixVoiceHandler::changeEverloopColors(const unsigned int *rgbwColors, unsigned int renderingLimit) {
+  const unsigned int ledsSize = everloopImage.leds.size();
   const unsigned int *rgbwNoColors = adjustColors(noColors);
-  const unsigned int ledsSize = image1d.leds.size();
-  // Transform current progress from [0:100] to [0:LEDS_AMOUNT] range
-  const float progress = round((estimatedUpdateProgress / 100.0f) * (float) ledsSize);
 
-  // Go though all the LEDs to reflect current progress
   for (int i = 0; i < ledsSize; i++) {
-    matrix_hal::LedValue &currentLed = image1d.leds[i];
-    if (i <= progress) {
+    matrix_hal::LedValue &currentLed = everloopImage.leds[i];
+    if (i <= renderingLimit) {
       currentLed.Set(rgbwColors[0], rgbwColors[1], rgbwColors[2], rgbwColors[3]);
     } else {
       currentLed.Set(rgbwNoColors[0], rgbwNoColors[1], rgbwNoColors[2], rgbwNoColors[3]);
     }
-    everloop.Write(&image1d);
+    everloop.Write(&everloopImage);
   }
 
-  delete rgbwColors;
   delete rgbwNoColors;
+}
+
+/**
+ * This API is iteratively called when OTA update is in progress.
+ * When we receive a current progress from OTA callback, we can project it to LEDs.
+ */
+void MatrixVoiceHandler::renderOTAUpdateProgress(unsigned int estimatedUpdateProgress) {
+  const unsigned int ledsSize = everloopImage.leds.size();
+  const unsigned int *rgbwColors = adjustColors(updateInProgressColors);
+  // Transform current progress from [0:100] to [0:LEDS_AMOUNT] range
+  const float progress = round((estimatedUpdateProgress / 100.0f) * (float) ledsSize);
+  // Go though LEDs to reflect current progress
+  changeEverloopColors(rgbwColors, progress);
+  delete rgbwColors;
 }
 
 /**
@@ -175,8 +183,7 @@ void MatrixVoiceHandler::renderOTAUpdateProgress(unsigned int estimatedUpdatePro
  */
 void MatrixVoiceHandler::renderEverloop(bool isWiFiConnected) {
   unsigned int *rgbwColors;
-  const unsigned int *rgbwNoColors = adjustColors(noColors);
-  const unsigned int ledsSize = image1d.leds.size();
+  const unsigned int ledsSize = everloopImage.leds.size();
 
   // Adjust colors with brightness and gamma correction depending on state
   if (isHotwordDetected()) {
@@ -190,20 +197,11 @@ void MatrixVoiceHandler::renderEverloop(bool isWiFiConnected) {
   // Animate LED ring: outer loop controls the number of LEDs we need to turn on / off 
   unsigned int ledNumber = 0;
   do {
-    for (int i = 0; i < ledsSize; i++) {
-      matrix_hal::LedValue &currentLed = image1d.leds[i];
-      if (i <= ledNumber) {
-        currentLed.Set(rgbwColors[0], rgbwColors[1], rgbwColors[2], rgbwColors[3]);
-      } else {
-        currentLed.Set(rgbwNoColors[0], rgbwNoColors[1], rgbwNoColors[2], rgbwNoColors[3]);
-      }
-      everloop.Write(&image1d);
-    }
+    changeEverloopColors(rgbwColors, ledNumber);
     delay(EVERLOOP_OTA_UPDATE_ANIMATION_DELAY);
   } while (ledNumber++ < ledsSize);
 
   delete rgbwColors;
-  delete rgbwNoColors;
 }
 
 /**
@@ -255,12 +253,11 @@ bool MatrixVoiceHandler::shouldSendAudio() {
  * Setup a primary task for hotword detection and streaming audio via MQTT to Kaldi server.
  * Callback is provided via MatrixVoiceFacade.
  */
-MatrixVoiceHandler *MatrixVoiceHandler::initAudioStreamingTask(TaskCallbackFunc _audioStreamCallbackFn) {
+void MatrixVoiceHandler::initAudioStreamingTask(TaskCallbackFunc _audioStreamCallbackFn) {
   audioStreamCallbackFn = _audioStreamCallbackFn;
   audioStreamingGroup = xEventGroupCreate();
   xTaskCreatePinnedToCore(audioStreamingTaskWrapper, "microphonesTask", AUDIO_STREAMING_TASK_STACK_SIZE, this, 3, &audioStreamingTaskHandler, 0);
   aquireAudioStream();
-  return this;
 }
 
 /**

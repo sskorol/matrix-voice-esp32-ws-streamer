@@ -5,10 +5,11 @@ const long NetworkHandler::WIFI_CONNECTION_DELAY = 5000;
 const long NetworkHandler::WIFI_RECONNECT_ATTEMPTS = 10;
 
 // Topic required for streaming audio chunks to Kaldi server
-const std::string NetworkHandler::AUDIO_FRAME_TOPIC = PID + std::string("/audioServer/audioFrame");
-// These 2 topics may change hotword flag to trigger either wakeword detection or streaming to Kaldi
-const std::string NetworkHandler::TOGLE_OFF_TOPIC = PID + std::string("/hotword/toggleOff");
-const std::string NetworkHandler::TOGGLE_ON_TOPIC = PID + std::string("/hotword/toggleOn");
+const std::string NetworkHandler::VOICE_STREAM_TOPIC = PID + std::string("/stream/voice");
+// This topic may change hotword flag to trigger either wakeword detection or streaming to Kaldi
+const std::string NetworkHandler::HOTWORD_TOPIC = PID + std::string("/hotword");
+// Use this topic to block or unblock audio streaming
+const std::string NetworkHandler::MUTE_TOPIC = PID + std::string("/mute");
 // Use this topic if you want to print some debug info (not used right now in favor of Serial log)
 const std::string NetworkHandler::DEBUG_TOPIC = PID + std::string("/debug");
 // A special topic for restarting ESP32
@@ -19,6 +20,7 @@ const std::string NetworkHandler::TRANSCRIBE_TOPIC = PID + std::string("/finalTr
 // MQTT settings
 const String NetworkHandler::ASYNC_CLIENT_ID = "MatrixVoiceAsync";
 const String NetworkHandler::SYNC_CLIENT_ID = "MatrixVoiceSync";
+const std::string NetworkHandler::COMMON_PAYLOAD_KEY = "value";
 const unsigned int NetworkHandler::JSON_BUFFER_SIZE = 300;
 const unsigned long NetworkHandler::NETWORK_RECONNECT_TIMEOUT = 2000;
 
@@ -33,11 +35,10 @@ NetworkHandler::NetworkHandler(MatrixVoiceHandler *_matrixVoiceHandler) {
 /**
  * Start Wi-Fi, MQTT and OTA.
  */
-NetworkHandler *NetworkHandler::setup() {
+void NetworkHandler::setup() {
   initMqttClients();
   initWiFi();
   initOTA();
-  return this;
 }
 
 /**
@@ -45,8 +46,8 @@ NetworkHandler *NetworkHandler::setup() {
  */
 void NetworkHandler::mqttConnectHandler(bool isSessionPresent) {
   Serial.println("[ESP] Connected to async MQTT");
-  asyncMqttClient.subscribe(TOGLE_OFF_TOPIC.c_str(), 0);
-  asyncMqttClient.subscribe(TOGGLE_ON_TOPIC.c_str(), 0);
+  asyncMqttClient.subscribe(HOTWORD_TOPIC.c_str(), 0);
+  asyncMqttClient.subscribe(MUTE_TOPIC.c_str(), 0);
   asyncMqttClient.subscribe(RESTART_TOPIC.c_str(), 0);
   asyncMqttClient.subscribe(TRANSCRIBE_TOPIC.c_str(), 0);
 }
@@ -107,28 +108,36 @@ bool NetworkHandler::hasValue(const std::string inputString, const std::string s
 void NetworkHandler::mqttMessageHandler(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t length, size_t index, size_t total) {
   if (length + index == total) {
     const std::string convertedTopic(topic);
-    const std::string convertedPayload(payload);
+    StaticJsonDocument<JSON_BUFFER_SIZE> jsonBuffer;
+    DeserializationError error = deserializeJson(jsonBuffer, payload, length);
 
     // If we receive a trascription from Kaldi server, we have to go back to wakeword detection state
-    if ((hasValue(convertedTopic, "finalTranscribe") && matrixVoiceHandler->isHotwordDetected()) || hasValue(convertedTopic, "toggleOn")) {
-      matrixVoiceHandler->changeHotwordState(false);
+    if (hasValue(convertedTopic, "finalTranscribe")) {
       Serial.println("[ESP] Received final transcribe");
+      matrixVoiceHandler->changeHotwordState(false);
       matrixVoiceHandler->aquireEverloop();
-    // In case of any unexpected behaviour with audio streaming, we can still change hotword flag manually
-    } else if (hasValue(convertedTopic, "toggleOff")) {
-      matrixVoiceHandler->changeHotwordState(true);
-      matrixVoiceHandler->aquireEverloop();
-    // If we want to restart ESP32 for some reason, we have to provide a hashed password in a payload
-    } else if (hasValue(convertedTopic, RESTART_TOPIC.c_str())) {
-      StaticJsonDocument<JSON_BUFFER_SIZE> jsonBuffer;
-      DeserializationError error = deserializeJson(jsonBuffer, convertedPayload.c_str());
-      if (!error) {
-        JsonObject jsonRoot = jsonBuffer.as<JsonObject>();
-        if (jsonRoot.containsKey(OTA_PASSWORD_HASH_KEY) && jsonRoot[OTA_PASSWORD_HASH_KEY] == OTA_PASS_HASH) {
-          ESP.restart();
-        }
-      } else {
-        Serial.println("[ESP] Unable to restart ESP");
+      // In case of any unexpected behaviour with streaming, we can still change hotword flag manually
+    } else if (hasValue(convertedTopic, "hotword") && error.code() == DeserializationError::Ok) {
+      JsonObject jsonRoot = jsonBuffer.as<JsonObject>();
+      if (jsonRoot.containsKey(COMMON_PAYLOAD_KEY)) {
+        bool isDetected = jsonRoot[COMMON_PAYLOAD_KEY];
+        matrixVoiceHandler->changeHotwordState(isDetected);
+        matrixVoiceHandler->aquireEverloop();
+        Serial.println("[ESP] Updated hotword state");
+      }
+      // If we want to mute / unmute mics, we just change a flag to avoid reading and streaming data
+    } else if (hasValue(convertedTopic, "mute") && error.code() == DeserializationError::Ok) {
+      JsonObject jsonRoot = jsonBuffer.as<JsonObject>();
+      if (jsonRoot.containsKey(COMMON_PAYLOAD_KEY)) {
+        bool shouldMute = jsonRoot[COMMON_PAYLOAD_KEY];
+        matrixVoiceHandler->changeAudioState(!shouldMute);
+        Serial.println("[ESP] Updated audio state");
+      }
+      // If we want to restart ESP32 for some reason, we have to provide a hashed password in a payload
+    } else if (hasValue(convertedTopic, RESTART_TOPIC.c_str()) && error.code() == DeserializationError::Ok) {
+      JsonObject jsonRoot = jsonBuffer.as<JsonObject>();
+      if (jsonRoot.containsKey(OTA_PASSWORD_HASH_KEY) && jsonRoot[OTA_PASSWORD_HASH_KEY] == OTA_PASS_HASH) {
+        ESP.restart();
       }
     }
   }
@@ -140,6 +149,7 @@ void NetworkHandler::mqttMessageHandler(char *topic, char *payload, AsyncMqttCli
 void NetworkHandler::initMqttClients() {
   initMqttReconnectTimer();
 
+  // Async clients configuration
   asyncMqttClient.onConnect([this](bool isSessionPresent) {
     this->mqttConnectHandler(isSessionPresent);
   });
@@ -152,6 +162,7 @@ void NetworkHandler::initMqttClients() {
   asyncMqttClient.setServer(MQTT_IP, MQTT_PORT);
   asyncMqttClient.setCredentials(MQTT_USER, MQTT_PASS);
 
+  // Sync client configuration
   syncMqttClient.setClient(wifiClient);
   syncMqttClient.setServer(MQTT_IP, MQTT_PORT);
 }
