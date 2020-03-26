@@ -10,10 +10,10 @@
 #include "wishbone_bus.h"
 
 extern "C" {
-#include "esp_wn_iface.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/event_groups.h"
-#include "freertos/timers.h"
+  #include "esp_wn_iface.h"
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/event_groups.h"
+  #include "freertos/timers.h"
 }
 
 // Mics settings
@@ -78,7 +78,7 @@ class MatrixVoiceHandler {
   unsigned int hotwordColors[COLORS_AMOUNT] = {0, 255, 0, 0};
   unsigned int idleColors[COLORS_AMOUNT] = {0, 0, 255, 0};
   unsigned int noWiFiColors[COLORS_AMOUNT] = {255, 0, 0, 0};
-  unsigned int updateInProgressColors[COLORS_AMOUNT] = {153, 51, 255, 0};
+  unsigned int updateInProgressColors[COLORS_AMOUNT] = {255, 0, 255, 0};
   unsigned int noColors[COLORS_AMOUNT] = {0, 0, 0, 0};
 
   // Hotword timer API
