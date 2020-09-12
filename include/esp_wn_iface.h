@@ -1,6 +1,7 @@
 #pragma once
+
 #include "dl_lib_coefgetter_if.h"
-#include "stdint.h"
+#include <cstdint>
 
 //Opaque model data container
 typedef struct model_iface_data_t model_iface_data_t;
@@ -9,13 +10,13 @@ typedef struct model_iface_data_t model_iface_data_t;
 //The probability of being wake words is increased with increasing mode,
 //As a consequence also the false alarm rate goes up
 typedef enum {
-  DET_MODE_90 = 0,  //Normal, response accuracy rate about 90%
-  DET_MODE_95       //Aggressive, response accuracy rate about 95%
+    DET_MODE_90 = 0,  //Normal, response accuracy rate about 90%
+    DET_MODE_95       //Aggressive, response accuracy rate about 95%
 } det_mode_t;
 
 typedef struct {
-  int wake_word_num;      //The number of all wake words
-  char **wake_word_list;  //The name list of wake words
+    int wake_word_num;      //The number of all wake words
+    char **wake_word_list;  //The name list of wake words
 } wake_word_info_t;
 
 /**
@@ -107,13 +108,13 @@ typedef void (*esp_wn_iface_op_destroy_t)(model_iface_data_t *model);
  * This structure contains the functions used to do operations on a wake word detection model.
  */
 typedef struct {
-  esp_wn_iface_op_create_t create;
-  esp_wn_iface_op_get_samp_chunksize_t get_samp_chunksize;
-  esp_wn_iface_op_get_samp_rate_t get_samp_rate;
-  esp_wn_iface_op_get_word_num_t get_word_num;
-  esp_wn_iface_op_get_word_name_t get_word_name;
-  esp_wn_iface_op_set_det_threshold_t set_det_threshold;
-  esp_wn_iface_op_get_det_threshold_t get_det_threshold;
-  esp_wn_iface_op_detect_t detect;
-  esp_wn_iface_op_destroy_t destroy;
+    esp_wn_iface_op_create_t create;
+    esp_wn_iface_op_get_samp_chunksize_t get_samp_chunksize;
+    esp_wn_iface_op_get_samp_rate_t get_samp_rate;
+    esp_wn_iface_op_get_word_num_t get_word_num;
+    esp_wn_iface_op_get_word_name_t get_word_name;
+    esp_wn_iface_op_set_det_threshold_t set_det_threshold;
+    esp_wn_iface_op_get_det_threshold_t get_det_threshold;
+    esp_wn_iface_op_detect_t detect;
+    esp_wn_iface_op_destroy_t destroy;
 } esp_wn_iface_t;

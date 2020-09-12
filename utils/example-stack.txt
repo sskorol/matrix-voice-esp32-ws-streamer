@@ -1,0 +1,20 @@
+Guru Meditation Error: Core  1 panic'ed (Interrupt wdt timeout on CPU1)
+Core 1 register dump:
+PC      : 0x4000921d  PS      : 0x00060034  A0      : 0x80007d16  A1      : 0x3ffe3e50
+A2      : 0x00800000  A3      : 0x3ffe4080  A4      : 0x800dbc79  A5      : 0x3ffe4080
+A6      : 0x3ffc372c  A7      : 0x3f401cda  A8      : 0x40930000  A9      : 0x00000061
+A10     : 0x00800000  A11     : 0x4093001c  A12     : 0x4008cc9d  A13     : 0x3ffe3fa0
+A14     : 0x3ffbe7c8  A15     : 0x00000000  SAR     : 0x00000012  EXCCAUSE: 0x00000006
+EXCVADDR: 0x00000000  LBEG    : 0x400014fd  LEND    : 0x4000150d  LCOUNT  : 0xfffffffc
+
+Backtrace: 0x4000921d:0x3ffe3e50 0x40007d13:0x3ffe3e70 0x40007c69:0x3ffe3e90 0x40008148:0x3ffe3eb0 0x4008e12c:0x3ffe3f40 0x4008e154:0x3ffe3f60 0x4008b12c:0x3ffe3f80 0x4008cce4:0x3ffe3fa0 0x4008cc9a:0x00000000
+
+Core 0 register dump:
+PC      : 0x4017cbe2  PS      : 0x00060b34  A0      : 0x800eb49d  A1      : 0x3ffbcd10
+A2      : 0x00000000  A3      : 0x00000001  A4      : 0x8008a058  A5      : 0x3ffbcc30
+A6      : 0x00000000  A7      : 0x3ffbca00  A8      : 0x800ed1b2  A9      : 0x3ffbcce0
+A10     : 0x00000000  A11     : 0x00000000  A12     : 0x00000005  A13     : 0x00000020
+A14     : 0x00000020  A15     : 0x00000000  SAR     : 0x00000000  EXCCAUSE: 0x00000006
+EXCVADDR: 0x00000000  LBEG    : 0x00000000  LEND    : 0x00000000  LCOUNT  : 0x00000000
+
+Backtrace: 0x4017cbe2:0x3ffbcd10 0x400eb49a:0x3ffbcd30 0x4008bd45:0x3ffbcd50 0x40089e45:0x3ffbcd70

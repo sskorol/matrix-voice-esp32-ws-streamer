@@ -2,15 +2,15 @@
 FIRMWARE=.pio/build/esp32dev/firmware.bin
 
 showhelp () {
-  echo "---------------------------------------"
-  echo "OTA-base installer (only for first use)"
-  echo "---------------------------------------"
+  echo "----------------------------------------------------"
+  echo "OTA-base installer (for the first deploy or crashes)"
+  echo "----------------------------------------------------"
   echo ""
   echo "usage:"
-  echo "./install.sh [RaspberryPi IP]"
+  echo "./deploy.sh [RaspberryPi IP]"
   echo ""
   echo "example:"
-  echo "./install.sh 192.168.1.10"
+  echo "./deploy.sh 192.168.0.100"
   echo ""
 } 
 

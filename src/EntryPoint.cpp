@@ -1,14 +1,14 @@
 #include "MatrixVoiceFacade.hpp"
+#define BAUD_RATE 115200
 
 MatrixVoiceFacade *matrixVoiceFacade;
 
 void setup() {
-  Serial.begin(115200);
-  matrixVoiceFacade = new MatrixVoiceFacade();
+    Serial.begin(BAUD_RATE);
+    matrixVoiceFacade = new MatrixVoiceFacade();
 }
 
 void loop() {
-  matrixVoiceFacade->checkForUpdates();
-  matrixVoiceFacade->keepMqttAlive();
-  delay(1);
+    matrixVoiceFacade->keepAlive();
+    delay(1);
 }

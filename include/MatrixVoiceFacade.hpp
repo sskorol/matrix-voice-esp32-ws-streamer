@@ -9,20 +9,20 @@
  * Aggregates key handlers to provide high level API to be used in EntryPoint.
  */
 class MatrixVoiceFacade {
- private:
-  MatrixVoiceHandler *matrixVoiceHandler;
-  NetworkHandler *networkHandler;
-  
-  // These callbacks mix matrix voice and network handlers' API. So they have to be located behind facade.
-  void everloopTaskCallback();
-  void audioStreamingTaskCallback();
+private:
+    MatrixVoiceHandler *matrixVoiceHandler;
+    NetworkHandler *networkHandler;
 
- public:
-  MatrixVoiceFacade();
+    // These callbacks mix matrix voice and network handlers' API. So they have to be located behind facade.
+    [[noreturn]] void everloopTaskCallback();
 
-  // Global polling API for the Arduino loop method.
-  void checkForUpdates();
-  void keepMqttAlive();
+    [[noreturn]] void audioStreamingTaskCallback();
+
+public:
+    MatrixVoiceFacade();
+
+    // Global polling API for the Arduino loop method.
+    void keepAlive();
 };
 
 #endif
