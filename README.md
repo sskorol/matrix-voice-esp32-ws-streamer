@@ -20,3 +20,8 @@ Here are key differences in comparison with the original version:
 - Adjust `platformio.ini` according to comments.
 - Connect Matrix Voice to RPi.
 - Run `./deploy [RPi_IP]`.
+
+### Voice Streaming
+
+This code is configured to work with [Vosk ASR](https://github.com/sskorol/asr-server) out of the box.
+However, if you want to stream voice data to your own ASR engine, make sure your WS server can accept 1024-bytes chunks in a 16k sample rate.

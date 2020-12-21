@@ -83,7 +83,7 @@ bool NetworkHandler::hasValue(const std::string &inputString, const std::string 
  */
 void
 NetworkHandler::mqttMessageHandler(char *topic, char *payload, __unused AsyncMqttClientMessageProperties properties,
-                                   size_t length, size_t index, size_t total) {
+                                   size_t length, __unused size_t index, __unused size_t total) {
     const std::string convertedTopic(topic);
     StaticJsonDocument<JSON_BUFFER_SIZE> jsonBuffer;
     DeserializationError error = deserializeJson(jsonBuffer, payload, length);
@@ -171,6 +171,7 @@ void NetworkHandler::initSocket() {
     webSocketsClient.onEvent([this](WStype_t type, uint8_t *payload, size_t length) {
         this->handleWebSocketEvent(type, payload, length);
     });
+    webSocketsClient.setReconnectInterval(WS_RECONNECT_INTERVAL);
 }
 
 /**
@@ -181,7 +182,7 @@ void NetworkHandler::keepSocketClientAlive() {
 }
 
 /**
- * WS publisher, which is used for sending audio chunks to Kaldi server.
+ * WS publisher, which is used for sending audio chunks to Vosk server.
  */
 void NetworkHandler::publishData(uint8_t *payload, size_t length) {
     webSocketsClient.sendBIN(payload, length);
@@ -196,6 +197,7 @@ void NetworkHandler::handleWebSocketEvent(WStype_t type, uint8_t *payload, size_
             Serial.println("[ESP] Disconnected from websocket server");
             isSocketClientConnected = false;
             matrixVoiceHandler->changeAudioState(false);
+            matrixVoiceHandler->acquireEverloop();
             break;
         case WStype_CONNECTED:
             Serial.println("[ESP] Connected to websocket server");

@@ -17,17 +17,17 @@ MatrixVoiceFacade::MatrixVoiceFacade() {
 }
 
 /**
- * Main audio task, which streams data captured from microphones via sync MQTT client to Kaldi server.
+ * Main audio task, which streams data captured from microphones via WS client to Vosk server.
  */
 [[noreturn]]
 void MatrixVoiceFacade::audioStreamingTaskCallback() {
     while (true) {
         // Check if streaming bits are set
         matrixVoiceHandler->waitForAudioStream();
-        // We start streaming only when MQTT client is ready and corresponding task is locked
+        // We start streaming only when WS client is ready and corresponding task is locked
         if (matrixVoiceHandler->shouldSendAudio() && networkHandler->isSocketConnected() &&
             isTaskAquired(MatrixVoiceHandler::AUDIO_STREAM_BLOCK_TIME)) {
-            // Call audio processing API with MQTT streaming callback
+            // Call audio processing API with WS streaming callback
             matrixVoiceHandler->readAudioData([this](uint8_t *voiceBuffer, size_t bufferSize) {
                 this->networkHandler->publishData(voiceBuffer, bufferSize);
             });

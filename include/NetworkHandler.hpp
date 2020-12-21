@@ -46,7 +46,7 @@ private:
 
     void
     mqttMessageHandler(char *topic, char *payload, __unused AsyncMqttClientMessageProperties properties, size_t length,
-                       size_t index, size_t total);
+                       __unused  size_t index, __unused size_t total);
 
     static bool hasValue(const std::string &inputString, const std::string &searchString);
 
@@ -55,6 +55,8 @@ private:
     bool isSocketClientConnected;
 
     void initSocket();
+
+    void handleWebSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 
     // OTA settings
     static const std::string OTA_PASSWORD_HASH_KEY;
@@ -90,8 +92,6 @@ public:
     // MQTT API
     void connectToAsyncMqtt();
 
-    bool isSocketConnected() const;
-
     void publishData(uint8_t *payload, size_t length);
 
     // Static callback wrapper is required for using xTimerCreate API in OO manner.
@@ -103,7 +103,7 @@ public:
     // WebSocket API
     void keepSocketClientAlive();
 
-    void handleWebSocketEvent(WStype_t type, uint8_t * payload, size_t length);
+    bool isSocketConnected() const;
 };
 
 #endif
