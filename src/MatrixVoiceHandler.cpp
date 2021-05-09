@@ -50,10 +50,10 @@ MatrixVoiceHandler::MatrixVoiceHandler() {
  * Required for resetting hotword and everloop state if we don't receive a transcribe from Kaldi.
  */
 void MatrixVoiceHandler::resetHotword() {
-  if (isHotwordDetected()) {
-      changeHotwordState(false);
-      acquireEverloop();
-  }
+    if (isHotwordDetected()) {
+        changeHotwordState(false);
+        acquireEverloop();
+    }
 }
 
 /**

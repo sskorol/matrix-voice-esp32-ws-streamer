@@ -56,7 +56,7 @@ private:
 
     void initSocket();
 
-    void handleWebSocketEvent(WStype_t type, uint8_t * payload, size_t length);
+    void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length);
 
     // OTA settings
     static const std::string OTA_PASSWORD_HASH_KEY;

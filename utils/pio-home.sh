@@ -1,2 +1,2 @@
 #!/bin/bash
-pio home
+pio -c clion home

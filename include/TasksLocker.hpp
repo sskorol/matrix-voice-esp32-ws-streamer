@@ -2,8 +2,8 @@
 #define TASKS_LOCKER_HPP
 
 extern "C" {
-    #include "freertos/FreeRTOS.h"
-    #include "freertos/semphr.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 }
 
 /**

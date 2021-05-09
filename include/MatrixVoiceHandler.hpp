@@ -17,10 +17,10 @@
 #include "RingBuf.h"
 
 extern "C" {
-    #include "esp_wn_iface.h"
-    #include "freertos/FreeRTOS.h"
-    #include "freertos/event_groups.h"
-    #include "freertos/timers.h"
+#include "esp_wn_iface.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+#include "freertos/timers.h"
 }
 
 // Microphone settings

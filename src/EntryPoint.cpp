@@ -1,4 +1,5 @@
 #include "MatrixVoiceFacade.hpp"
+
 #define BAUD_RATE 115200
 
 MatrixVoiceFacade *matrixVoiceFacade;

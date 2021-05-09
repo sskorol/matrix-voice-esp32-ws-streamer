@@ -5,5 +5,4 @@
 !ota/bootloader.bin
 CMakeLists*.txt
 .DS_Store
-cmake-build-debug
-cmake-build-esp32dev
+cmake-build-*/
